@@ -16,16 +16,27 @@ class UrlValidator {
     try {
       val uri = parse(urlString)
 
-      val validationResults: Seq[(Boolean, -\/[UrlValidationError])] = Seq(
-        (validateLength(uri), -\/(UrlValidationError("Url too long"))),
-        (validateProtocol(uri), -\/(UrlValidationError("Url does not have a supported protocol"))),
-        (validateIsNotLocalhost(uri), -\/(UrlValidationError("Url should not point to localhost"))),
-        (validateNoUserAndPassword(uri), -\/(UrlValidationError("Url can't contain user and password"))),
-        (validateIsNotAnIPv4Address(uri), -\/(UrlValidationError("Url can not contain IPv4 addresses"))))
-
-      validationResults.find(!_._1).map(_._2).getOrElse(\/-(UrlValidationSuccess(parse(urlString).toString)))
+      for {
+        _ <- validateLength2(uri)
+        _ <- validateProtocol2(uri)
+        _ <- validateIsNotLocalhost2(uri)
+        _ <- validateNoUserAndPassword2(uri)
+        r <- validateIsNotAnIPv4Address2(uri)
+      } yield {
+        r
+      }
     } catch {
       case _: java.net.URISyntaxException => -\/(UrlValidationError("Url does not have a valid structure"))
+    }
+  }
+
+  def validateLength2(uri: Uri): \/[UrlValidationError, UrlValidationSuccess] = {
+    val urlString = uri.toStringRaw
+    if (urlString.length() <= 300) {
+      \/-(UrlValidationSuccess(uri.toString))
+    }
+    else {
+      -\/(UrlValidationError("Url too long"))
     }
   }
 
@@ -39,10 +50,24 @@ class UrlValidator {
     }
   }
 
+  def validateProtocol2(uri: Uri): \/[UrlValidationError, UrlValidationSuccess] = {
+    uri.protocol match {
+      case Some(protocol) if protocol.equalsIgnoreCase("http") || protocol.equalsIgnoreCase("https") => \/-(UrlValidationSuccess(uri.toString))
+      case _ => -\/(UrlValidationError("Url does not have a supported protocol"))
+    }
+  }
+
   def validateProtocol(uri: Uri): Boolean = {
     uri.protocol match {
       case Some(protocol) if protocol.equalsIgnoreCase("http") || protocol.equalsIgnoreCase("https") => true
       case _ => false
+    }
+  }
+
+  def validateIsNotAnIPv4Address2(uri: Uri): \/[UrlValidationError, UrlValidationSuccess] = {
+    uri.host match {
+      case Some(host) if host.matches("[0-9.]+") => -\/(UrlValidationError("Url can not contain IPv4 addresses"))
+      case _ => \/-(UrlValidationSuccess(uri.toString))
     }
   }
 
@@ -53,12 +78,29 @@ class UrlValidator {
     }
   }
 
+  def validateIsNotLocalhost2(uri: Uri): \/[UrlValidationError, UrlValidationSuccess] = {
+    val urlToLocalhost = uri.host.contains("localhost")
+    if (!urlToLocalhost) {
+      \/-(UrlValidationSuccess(uri.toString))
+    } else {
+      -\/(UrlValidationError("Url should not point to localhost"))
+    }
+  }
+
   def validateIsNotLocalhost(uri: Uri): Boolean = {
     val urlToLocalhost = uri.host.contains("localhost")
     if (!urlToLocalhost) {
       true
     } else {
       false
+    }
+  }
+
+  def validateNoUserAndPassword2(uri: Uri): \/[UrlValidationError, UrlValidationSuccess] = {
+    (uri.user, uri.password) match {
+      case (Some(_), None) => -\/(UrlValidationError("Url can't contain user and password"))
+      case (Some(_), Some(_)) => -\/(UrlValidationError("Url can't contain user and password"))
+      case _ => \/-(UrlValidationSuccess(uri.toString))
     }
   }
 
