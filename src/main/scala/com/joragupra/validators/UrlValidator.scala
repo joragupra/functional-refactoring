@@ -14,17 +14,21 @@ class UrlValidator {
 
   def validate(urlString: String): \/[UrlValidationError, UrlValidationSuccess] = {
     try {
-      if(validateLength(parse(urlString))) {
-        if(validateProtocol(parse(urlString))) {
-          if(validateIsNotLocalhost(parse(urlString))) {
-            if(validateNoUserAndPassword(parse(urlString))) {
-              if(validateIsNotAnIPv4Address(parse(urlString))) {
-                \/-(UrlValidationSuccess(parse(urlString).toString))
-              } else -\/(UrlValidationError("Url can not contain IPv4 addresses"))
-            } else -\/(UrlValidationError("Url can't contain user and password"))
-          } else -\/(UrlValidationError("Url should not point to localhost"))
-        } else -\/(UrlValidationError("Url does not have a supported protocol"))
-      } else -\/(UrlValidationError("Url too long"))
+      val uri = parse(urlString)
+
+      val validationResults: Seq[(Boolean, -\/[UrlValidationError])] = Seq(
+        (validateLength(uri), -\/(UrlValidationError("Url too long"))),
+        (validateProtocol(uri), -\/(UrlValidationError("Url does not have a supported protocol"))),
+        (validateIsNotLocalhost(uri), -\/(UrlValidationError("Url should not point to localhost"))),
+        (validateNoUserAndPassword(uri), -\/(UrlValidationError("Url can't contain user and password"))),
+        (validateIsNotAnIPv4Address(uri), -\/(UrlValidationError("Url can not contain IPv4 addresses"))))
+
+      for (result <- validationResults) {
+        if (!result._1)
+          return result._2
+      }
+
+      \/-(UrlValidationSuccess(parse(urlString).toString))
     } catch {
       case _: java.net.URISyntaxException => -\/(UrlValidationError("Url does not have a valid structure"))
     }
