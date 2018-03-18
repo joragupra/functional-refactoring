@@ -3,6 +3,8 @@ package com.joragupra.validators
 import com.netaporter.uri.Uri
 import com.netaporter.uri.Uri.parse
 import com.netaporter.uri.config.UriConfig
+
+import scala.util.{Success, Try}
 import scalaz.{-\/, \/, \/-}
 
 case class UrlValidationSuccess(validatedUrl: String)
@@ -13,20 +15,22 @@ class UrlValidator {
   private implicit val config = UriConfig.conservative
 
   def validate(urlString: String): \/[UrlValidationError, UrlValidationSuccess] = {
-    try {
-      val uri = parse(urlString)
+    for {
+      uri <- buildUri(urlString)
+      _ <- liftToEither(validateLength, "Url too long")(uri)
+      _ <- liftToEither(validateProtocol, "Url does not have a supported protocol")(uri)
+      _ <- liftToEither(validateIsNotLocalhost, "Url should not point to localhost")(uri)
+      _ <- liftToEither(validateNoUserAndPassword, "Url can't contain user and password")(uri)
+      r <- liftToEither(validateIsNotAnIPv4Address, "Url can not contain IPv4 addresses")(uri)
+    } yield {
+      r
+    }
+  }
 
-      for {
-        _ <- liftToEither(validateLength, "Url too long")(uri)
-        _ <- liftToEither(validateProtocol, "Url does not have a supported protocol")(uri)
-        _ <- liftToEither(validateIsNotLocalhost, "Url should not point to localhost")(uri)
-        _ <- liftToEither(validateNoUserAndPassword, "Url can't contain user and password")(uri)
-        r <- liftToEither(validateIsNotAnIPv4Address, "Url can not contain IPv4 addresses")(uri)
-      } yield {
-        r
-      }
-    } catch {
-      case _: java.net.URISyntaxException => -\/(UrlValidationError("Url does not have a valid structure"))
+  private def buildUri(urlString: String): \/[UrlValidationError, Uri] = {
+    Try(parse(urlString)) match {
+      case Success(uri) => \/-(uri)
+      case _ => -\/(UrlValidationError("Url does not have a valid structure"))
     }
   }
 
